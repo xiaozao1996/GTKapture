@@ -11,30 +11,30 @@
  */
 #include "window.h"
 
-// 移动按钮窗口
-void move_button_window(MainData *main_data){
+// 移动按钮窗口，加入偏移量
+void move_button_window(MainData *main_data, gint x, gint y){
     ShapeData *select_area_data = main_data->select_area_data;
     gint x_end = select_area_data->x_end;
     gint y_end = select_area_data->y_end;
 
     GtkWidget *window = main_data->button_window;
+    // 显示所有组件
+    gtk_widget_show_all(window);
 
-    // 获取窗口的宽度
+    // 获取窗口的宽度和高度
     gint window_width = gtk_widget_get_allocated_width(window);
     gint window_height = gtk_widget_get_allocated_height(window);
 
-    // 计算新位置，使窗口的最右边与 x_end 对齐
-    gint new_x = x_end - window_width;
-    gint new_y = y_end;
+    // 计算新位置，添加偏移量
+    gint new_x = x - window_width + BUTTON_WINDOW_OFFSET_X;
+    gint new_y = y + BUTTON_WINDOW_OFFSET_Y;
 
     // 移动窗口
     gtk_window_move(GTK_WINDOW(window), new_x, new_y);
-    // 显示所有组件
-    gtk_widget_show_all(window);
-    // 确保窗口显示在最前面
-    gtk_window_present(GTK_WINDOW(window));
+    
+    // 将窗口设置为始终在最前面
+    gtk_window_set_keep_above(GTK_WINDOW(window), TRUE);
 }
-
 
 void create_button_window(MainData *main_data){
     GtkWidget *window, *hbox;

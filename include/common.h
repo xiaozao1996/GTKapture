@@ -71,6 +71,7 @@ typedef struct
 
     gboolean is_pressing; // 是否正在绘制
     gboolean is_drawing; // 是否正在绘制
+    gboolean has_select_area; // 是否有选择区
 
     // 存储创建的窗口
     GtkWidget *prepare_window;
@@ -95,21 +96,47 @@ void ensure_select_area_correct_order(ShapeData *shape);
 // 判断点 (x, y) 是否在矩形内
 gboolean is_point_in_select_area(ShapeData *shape, gint x, gint y);
 // 设置光标样式的函数
-void set_cursor(MainData *main_data, GdkWindow *window, GdkCursorType cursor_type);
+void set_cursor(MainData *main_data, GdkCursorType cursor_type);
+// 判断给定的坐标(x, y)是否在指定的圆内（允许偏差值 CORNER_CIRCLE_TOLERANCE）
+gboolean is_point_in_corner_circle_with_tolerance(double x, double y, double circle_x, double circle_y, double radius);
+// 根据给定坐标判断该点是否在四个角的圆形上（允许偏差值 tolerance）
+GdkCursorType check_point_in_select_area_with_tolerance(double x, double y, ShapeData *shape_data);
+// 限制移动后的选择区不超过屏幕的边缘
+void limit_select_area_in_background(ShapeData *select_area_data, gint x_move, gint y_move, gint background_width, gint background_height);
+// 保存到剪切板
+void save_to_clipboard(MainData *data);
+// 保存到本地
+void save_to_file(MainData *main_data);
+// 延迟退出的回调函数
+gboolean delayed_quit(gpointer data);
+// 定义延迟退出函数
+void delayed_exit(MainData *main_data);
+// 释放列表的每个元素
+GList* free_draw_shape_list(GList *list);
+// 移除最后一个加入的元素
+GList* free_last_draw_shape(GList *list);
 
 #define DEFAULT_SHAPE_DATA (ShapeData) {\
     0, 0, 0, 0, \
     1, 1, 1, 1, \
     2, 10, \
-    0, 0, 5, 0, 2 * G_PI, \
+    0, 0, 10, 0, 2 * G_PI, \
     20, NULL, RECTANGLE}
 
 #define SCREEN_START_X 0
 #define SCREEN_START_Y 0
 
+#define BUTTON_WINDOW_OFFSET_X 0
+#define BUTTON_WINDOW_OFFSET_Y 20
+
 #define GRAY_R 0.5  // 灰色的红色分量
 #define GRAY_G 0.5  // 灰色的绿色分量
 #define GRAY_B 0.5  // 灰色的蓝色分量
 #define GRAY_A 0.5  // 半透明的 alpha 值，0 表示完全透明，1 表示完全不透明
+
+// 宏定义容差值
+#define CORNER_CIRCLE_TOLERANCE 2.0  // 四角圆容差值
+
+#define DELAYED_EXIT_TIME 100 
 
 #endif // COMMON_H

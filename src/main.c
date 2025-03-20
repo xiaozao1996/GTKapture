@@ -33,7 +33,6 @@ static void init_main_data(MainData *main_data) {
     main_data->current_shape_data = create_default_shape_data();
 
     main_data->run_mode = WAIT_MODE;
-        
 }
 
 int main(int argc, char *argv[]) {
@@ -48,10 +47,11 @@ int main(int argc, char *argv[]) {
     create_capture_window(&main_data);
     create_button_window(&main_data);
 
-    on_select_area_mode_click(NULL, &main_data);
-
     // 显示所有组件
     gtk_widget_show_all(main_data.capture_window);
+
+    // 自动点击一下选区按钮
+    on_select_area_mode_click(main_data.capture_window, &main_data);
 
     // 进入 GTK 主循环
     gtk_main();

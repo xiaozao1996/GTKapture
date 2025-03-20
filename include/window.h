@@ -15,7 +15,8 @@
 #include "common.h"
 #include "on_event.h"
 
-void move_button_window(MainData *main_data);
+// 移动按钮窗口，加入偏移量
+void move_button_window(MainData *main_data, gint x, gint y);
 void create_button_window(MainData *main_data);
 void create_capture_window(MainData *main_data);
 

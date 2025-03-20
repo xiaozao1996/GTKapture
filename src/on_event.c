@@ -62,7 +62,15 @@ void on_mouse_press(GtkWidget *widget, GdkEventButton *event, gpointer data) {
         }        
         
     } else if (event->button == GDK_BUTTON_SECONDARY) { // 右键
-        gtk_main_quit();  // 退出程序
+        // 在函数外部检查列表是否为空
+        if (main_data->draw_shape_list != NULL) {
+            // 释放最后加入的元素
+            main_data->draw_shape_list = free_last_draw_shape(main_data->draw_shape_list);
+            draw_rectangle_line_arrow_text_surface(main_data);
+            gtk_widget_queue_draw(widget); // 触发重绘
+        }else{
+            gtk_main_quit();  // 退出程序
+        }
     }
 }
 
@@ -85,10 +93,42 @@ void on_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer data) {
                 break;
                 
             case SELECT_AREA_MODE:
-                copy_current_shape_data(select_area_data, current_shape_data);
+                switch (main_data->cursor_type)
+                {
+                case GDK_TOP_LEFT_CORNER:
+                    select_area_data->x_start = current_shape_data->x_end;
+                    select_area_data->y_start = current_shape_data->y_end;
+                    break;
+                case GDK_TOP_RIGHT_CORNER:
+                    select_area_data->x_end = current_shape_data->x_end;
+                    select_area_data->y_start = current_shape_data->y_end;
+                    break;
+                case GDK_BOTTOM_RIGHT_CORNER:
+                    select_area_data->x_end = current_shape_data->x_end;
+                    select_area_data->y_end = current_shape_data->y_end;
+                    break;
+                case GDK_BOTTOM_LEFT_CORNER:
+                    select_area_data->x_start = current_shape_data->x_end;
+                    select_area_data->y_end = current_shape_data->y_end;
+                    break;
+                case GDK_FLEUR: // 跟随鼠标移动
+                    gint x_move = current_shape_data->x_end - current_shape_data->x_start;
+                    gint y_move = current_shape_data->y_end - current_shape_data->y_start;
+                    // 限制不能超过屏幕边缘
+                    limit_select_area_in_background(select_area_data, x_move, y_move, main_data->background_width, main_data->background_height);
+                    // 更新当前点击的坐标
+                    current_shape_data->x_start = current_shape_data->x_end;
+                    current_shape_data->y_start = current_shape_data->y_end;
+                    break;
+                
+                default:
+                    copy_current_shape_data(select_area_data, current_shape_data);
+                    break;
+                }
+                // 画选择区时隐藏按钮窗口
+                gtk_widget_hide(main_data->button_window);
                 ensure_select_area_correct_order(select_area_data);
                 draw_select_area_surface(main_data);
-                move_button_window(main_data);
                 break;
         
             case FULL_SCREEN_MODE:
@@ -101,7 +141,6 @@ void on_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer data) {
             case DRAW_TEXT_MODE:
                 limit_shape_in_select_area(current_shape_data, select_area_data);
                 draw_rectangle_line_arrow_text_surface(main_data);
-                move_button_window(main_data);
                 break;
         
             case DRAW_FREE_MODE:
@@ -112,22 +151,28 @@ void on_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer data) {
                 // 如果 run_mode 的值不在预期的范围内，可以处理未知情况
                 break;
         }
+        gtk_widget_queue_draw(widget); // 触发重绘
     }
-    else{ // 没有点击的情况下
+    else{ // 没有点击的情况下移动鼠标
         if (main_data->run_mode == SELECT_AREA_MODE) {
-            if (is_point_in_select_area(main_data->select_area_data, event->x, event->y)) {
-                // 选择区域内，改变鼠标为十字箭头
-                g_print("选择区域内，改变鼠标为十字箭头\n");
-                set_cursor(main_data, event->window, GDK_CROSSHAIR);
-            }else {
-                // 选择区域外，改变鼠标为十字
-                g_print("选择区域外，改变鼠标为十字\n");
-                set_cursor(main_data, event->window, GDK_CROSS);
+            GdkCursorType cursor_type = check_point_in_select_area_with_tolerance(event->x, event->y, main_data->select_area_data);
+            if (cursor_type != GDK_ARROW){
+                set_cursor(main_data, cursor_type);
             }
+            else{
+                if (is_point_in_select_area(main_data->select_area_data, event->x, event->y)) {
+                    // 选择区域内，改变鼠标为十字箭头
+                    set_cursor(main_data, GDK_FLEUR);
+                }else {
+                    // 选择区域外，改变鼠标为十字
+                    set_cursor(main_data, GDK_CROSS);
+                }
+            }
+        }else{
+            // 选择区域外，改变鼠标为十字
+            set_cursor(main_data,  GDK_CROSS);
         }
     }
-    
-    gtk_widget_queue_draw(widget); // 触发重绘
 }
 
 void on_mouse_release(GtkWidget *widget, GdkEventButton *event, gpointer data) {
@@ -139,7 +184,9 @@ void on_mouse_release(GtkWidget *widget, GdkEventButton *event, gpointer data) {
         switch (main_data->run_mode) {
             case SELECT_AREA_MODE:
                 if(main_data->is_drawing){
-                    move_button_window(main_data);
+                    main_data->has_select_area = TRUE;
+                    free_draw_shape_list(main_data->draw_shape_list);
+                    move_button_window(main_data, select_area_data->x_end, select_area_data->y_end);
                 }
                 break;
         
@@ -151,8 +198,10 @@ void on_mouse_release(GtkWidget *widget, GdkEventButton *event, gpointer data) {
             case DRAW_LINE_MODE:
             case DRAW_ARROW_MODE:
             case DRAW_TEXT_MODE:
-                ShapeData *new_shape = create_and_copy_current_shape_data(main_data->current_shape_data);
-                main_data->draw_shape_list = g_list_append(main_data->draw_shape_list, new_shape);
+                if(main_data->is_drawing){
+                    ShapeData *new_shape = create_and_copy_current_shape_data(main_data->current_shape_data);
+                    main_data->draw_shape_list = g_list_append(main_data->draw_shape_list, new_shape);
+                }
                 break;
         
             case DRAW_FREE_MODE:
@@ -168,57 +217,70 @@ void on_mouse_release(GtkWidget *widget, GdkEventButton *event, gpointer data) {
     main_data->is_pressing = FALSE;
 }
 
-
 // 各个按钮的回调函数
 void on_select_area_mode_click(GtkWidget *widget, gpointer data) {
     MainData *main_data = (MainData *)data;
-
+    ShapeData *select_area_data = main_data->select_area_data;
     if(main_data->run_mode != SELECT_AREA_MODE){
+        select_area_data->x_start = SCREEN_START_X;
+        select_area_data->y_start = SCREEN_START_Y;
+        select_area_data->x_end = SCREEN_START_X;
+        select_area_data->y_end = SCREEN_START_Y;
+        main_data->run_mode = SELECT_AREA_MODE;
+        // 清理绘图列表
+        main_data->draw_shape_list = free_draw_shape_list(main_data->draw_shape_list);
+        // 绘制全灰色的界面
         draw_background(main_data->cr, main_data->background_buf);
         draw_full_gray_surface(main_data->cr, main_data->background_width, main_data->background_height);
-        main_data->run_mode = SELECT_AREA_MODE;
+        gtk_widget_queue_draw(main_data->capture_window); // 触发重绘
+        // 选择区域外，改变鼠标为十字
+        set_cursor(main_data, GDK_CROSS);
 
+        // 将按钮窗口移动到屏幕正中央
+        move_button_window(main_data, main_data->background_width / 3 * 2, main_data->background_height);
+
+        main_data->has_select_area = FALSE;
     }
-    
 }
 
 void on_full_screen_mode_click(GtkWidget *widget, gpointer data) {
     MainData *main_data = (MainData *)data;
-    const gchar *button_label = gtk_button_get_label(GTK_BUTTON(widget));
-    g_print("按钮 %s 被点击了\n", button_label);
-    main_data->run_mode = FULL_SCREEN_MODE;
+    ShapeData *select_area_data = main_data->select_area_data;
+    if(main_data->run_mode != FULL_SCREEN_MODE){
+        // 设置为全屏
+        select_area_data->x_start = SCREEN_START_X;
+        select_area_data->y_start = SCREEN_START_Y;
+        select_area_data->x_end = main_data->background_width;
+        select_area_data->y_end = main_data->background_height;
+
+        main_data->run_mode = FULL_SCREEN_MODE;
+        main_data->has_select_area = TRUE;
+        draw_select_area_surface(main_data);
+        gtk_widget_queue_draw(main_data->capture_window); // 触发重绘
+        move_button_window(main_data, select_area_data->x_end, select_area_data->y_end);
+    }
 }
 
 void on_draw_rectangle_mode_click(GtkWidget *widget, gpointer data) {
     MainData *main_data = (MainData *)data;
-    const gchar *button_label = gtk_button_get_label(GTK_BUTTON(widget));
-    g_print("按钮 %s 被点击了\n", button_label);
     main_data->run_mode = DRAW_RECTANGLE_MODE;
 }
 
 void on_draw_line_mode_click(GtkWidget *widget, gpointer data) {
     MainData *main_data = (MainData *)data;
     main_data->run_mode = DRAW_LINE_MODE;
-
-    const gchar *button_label = gtk_button_get_label(GTK_BUTTON(widget));
-    g_print("按钮 %s 被点击了\n", button_label);
-    
 }
 
 void on_draw_arrow_mode_click(GtkWidget *widget, gpointer data) {
     MainData *main_data = (MainData *)data;
     main_data->run_mode = DRAW_ARROW_MODE;
 
-    const gchar *button_label = gtk_button_get_label(GTK_BUTTON(widget));
-    g_print("按钮 %s 被点击了\n", button_label);
 }
 
 void on_draw_free_mode_click(GtkWidget *widget, gpointer data) {
     MainData *main_data = (MainData *)data;
     main_data->run_mode = DRAW_FREE_MODE;
 
-    const gchar *button_label = gtk_button_get_label(GTK_BUTTON(widget));
-    g_print("按钮 %s 被点击了\n", button_label);
 }
 
 void on_draw_text_mode_click(GtkWidget *widget, gpointer data) {
@@ -227,13 +289,19 @@ void on_draw_text_mode_click(GtkWidget *widget, gpointer data) {
 }
 
 void on_save_clipboard_click(GtkWidget *widget, gpointer data) {
-    const gchar *button_label = gtk_button_get_label(GTK_BUTTON(widget));
-    g_print("按钮 %s 被点击了\n", button_label);
+    MainData *main_data = (MainData *)data;
+    if(main_data->has_select_area){
+        save_to_clipboard(main_data);
+    }
+    delayed_exit(main_data);
 }
 
 void on_save_file_click(GtkWidget *widget, gpointer data) {
-    const gchar *button_label = gtk_button_get_label(GTK_BUTTON(widget));
-    g_print("按钮 %s 被点击了\n", button_label);
+    MainData *main_data = (MainData *)data;
+    if(main_data->has_select_area){
+        save_to_file(main_data);
+    }
+    delayed_exit(main_data);
 }
 
 void on_exit_click(GtkWidget *widget, gpointer data) {

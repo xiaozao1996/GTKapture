@@ -34,7 +34,7 @@ void on_save_file_click(GtkWidget *widget, gpointer data);
 void on_exit_click(GtkWidget *widget, gpointer data);
 
 // ============================================== 因为此处与 window.h 互相调用，所以需要 window.h 的声明
-void move_button_window(MainData *main_data);
+void move_button_window(MainData *main_data, gint x, gint y);
 void create_button_window(MainData *main_data);
 void create_capture_window(MainData *main_data);
 
